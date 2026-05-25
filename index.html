@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParkingExtract</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    background: #f8f7f4;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+
+  /* ── Nav ─────────────────────────────────────── */
+  nav {
+    background: #fff;
+    border-bottom: 1px solid #e8e6e1;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.03em; display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+  .badge {
+    font-size: 11px; background: #f0fdf4; color: #16a34a;
+    padding: 3px 10px; border-radius: 99px; border: 1px solid #bbf7d0; font-weight: 600;
+  }
+
+  /* ── Layout ──────────────────────────────────── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  .card {
+    background: #fff; border-radius: 14px; border: 1px solid #e8e6e1;
+    padding: 28px; margin-bottom: 20px;
+  }
+
+  /* ── API Key Row ─────────────────────────────── */
+  .key-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 24px;
+  }
+  .key-row label { font-size: 13px; font-weight: 600; color: #374151; min-width: 100px; }
+  .key-row input { flex: 1; min-width: 200px; }
+  .key-hint { font-size: 11px; color: #9ca3af; }
+
+  /* ── Form Elements ───────────────────────────── */
+  label.field-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 10px;
+    font-size: 14px; outline: none; background: #fafaf8; font-family: inherit;
+  }
+  input:focus, textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+  textarea {
+    width: 100%; min-height: 200px; padding: 14px 16px; border: 1px solid #d1d5db;
+    border-radius: 10px; font-size: 13px; font-family: 'JetBrains Mono', monospace;
+    resize: vertical; outline: none; background: #fafaf8;
+  }
+
+  /* ── Grid ─────────────────────────────────────── */
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 768px) { .input-grid { grid-template-columns: 1fr; } }
+
+  /* ── Dropzone ─────────────────────────────────── */
+  .dropzone {
+    border: 2px dashed #d1d5db; border-radius: 12px; min-height: 200px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; cursor: pointer; transition: all 0.15s; background: #fafaf8;
+    position: relative;
+  }
+  .dropzone.drag-over { border-color: #3b82f6; background: #eff6ff; }
+  .dropzone.has-file { border-color: #22c55e; background: #f0fdf4; }
+  .dropzone input { display: none; }
+  .dropzone-icon { font-size: 28px; margin-bottom: 6px; }
+  .dropzone-text { font-size: 13px; font-weight: 500; }
+  .dropzone-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+  .dropzone .file-name { font-size: 13px; font-weight: 600; }
+  .dropzone .file-size { font-size: 11px; color: #6b7280; margin-bottom: 10px; }
+
+  .btn-remove {
+    padding: 6px 14px; border-radius: 8px; border: 1px solid #fecaca;
+    background: #fff; color: #ef4444; font-size: 12px; cursor: pointer;
+    font-weight: 500; font-family: inherit;
+  }
+  .btn-remove:hover { background: #fef2f2; }
+
+  /* ── Actions ──────────────────────────────────── */
+  .actions {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 24px; padding-top: 20px; border-top: 1px solid #f3f4f6;
+  }
+  .btn-clear {
+    padding: 8px 14px; border-radius: 8px; border: none; background: transparent;
+    color: #9ca3af; font-size: 12px; cursor: pointer; font-weight: 500; font-family: inherit;
+  }
+  .btn-clear:hover { color: #ef4444; background: #fef2f2; }
+
+  .btn-extract {
+    padding: 12px 28px; border-radius: 10px; border: none; font-weight: 700;
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    background: #1a1a1a; color: #fff; transition: all 0.15s; font-family: inherit;
+  }
+  .btn-extract:hover { background: #333; }
+  .btn-extract:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+
+  .btn-csv {
+    padding: 10px 20px; border-radius: 10px; border: none; font-weight: 600;
+    font-size: 13px; cursor: pointer; background: #16a34a; color: #fff;
+    display: flex; align-items: center; gap: 6px; font-family: inherit;
+  }
+  .btn-csv:hover { background: #15803d; }
+
+  /* ── Spinner ──────────────────────────────────── */
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid #fff; border-top: 2px solid transparent;
+    border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error ────────────────────────────────────── */
+  .error-box {
+    padding: 14px 18px; background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 10px; color: #dc2626; font-size: 13px; margin-bottom: 16px;
+    display: none;
+  }
+  .error-box.show { display: block; }
+
+  /* ── Results ──────────────────────────────────── */
+  .results-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+  }
+  .results-header h3 { font-weight: 700; font-size: 16px; }
+  .results-badge {
+    font-size: 11px; background: #eff6ff; color: #2563eb;
+    padding: 3px 10px; border-radius: 99px; border: 1px solid #bfdbfe;
+    font-weight: 600; margin-left: 8px;
+  }
+
+  /* ── Table ────────────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto; border-radius: 12px; border: 1px solid #e8e6e1;
+    background: #fff; max-height: 500px; overflow-y: auto;
+  }
+  .table-wrap::-webkit-scrollbar { height: 6px; width: 6px; }
+  .table-wrap::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280;
+    background: #fafaf8; border-bottom: 1px solid #e8e6e1; white-space: nowrap;
+    position: sticky; top: 0; z-index: 5;
+  }
+  td {
+    padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #f3f4f6;
+    white-space: nowrap; color: #374151;
+  }
+  tr:nth-child(even) { background: #fafaf8; }
+  tr:hover { background: #f3f4f6; }
+
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+  }
+  .tag-mg  { background: #f3e8ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+  .tag-pr  { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+  .tag-ev  { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; }
+  .tag-def { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
+
+  .reg-plate {
+    background: #f3f4f6; padding: 2px 6px; border-radius: 4px;
+    font-size: 12px; border: 1px solid #e5e7eb; font-family: 'JetBrains Mono', monospace;
+  }
+  .price-cell { font-weight: 700; color: #059669; text-align: right; }
+
+  /* ── Empty State ─────────────────────────────── */
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: #9ca3af;
+  }
+  .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+  .empty-state h3 { font-weight: 600; font-size: 16px; color: #4b5563; }
+  .empty-state p { margin-top: 6px; max-width: 320px; margin-left: auto; margin-right: auto; }
+
+  #results-section { display: none; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="logo">
+    <span style="font-size:22px">🅿️</span>
+    ParkingExtract
+    <span class="logo-dot"></span>
+  </div>
+  <span class="badge">GPT-4o</span>
+</nav>
+
+<div class="container">
+
+  <!-- Input Card -->
+  <div class="card">
+    <div class="input-grid">
+      <!-- Text Input -->
+      <div>
+        <label class="field-label">Paste Booking Data</label>
+        <textarea id="input-text" placeholder="Paste raw data here...&#10;Reference: #12345&#10;Airport: LHR..."></textarea>
+      </div>
+
+      <!-- Image Upload -->
+      <div>
+        <label class="field-label">Upload Screenshot</label>
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept="image/*">
+          <div id="dropzone-empty">
+            <div class="dropzone-icon">📎</div>
+            <div class="dropzone-text">Click or drag & drop</div>
+            <div class="dropzone-hint">PNG, JPG, WEBP</div>
+          </div>
+          <div id="dropzone-filled" style="display:none; text-align:center;">
+            <div class="dropzone-icon">✅</div>
+            <div class="file-name" id="file-name"></div>
+            <div class="file-size" id="file-size"></div>
+            <button class="btn-remove" id="btn-remove" type="button">Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn-clear" id="btn-clear">Clear All</button>
+      <button class="btn-extract" id="btn-extract" disabled>Extract & Format Table →</button>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Results -->
+  <div id="results-section">
+    <div class="results-header">
+      <div>
+        <span style="font-weight:700;font-size:16px">Results</span>
+        <span class="results-badge" id="record-count"></span>
+      </div>
+      <button class="btn-csv" id="btn-csv">⬇ Download CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="table-head"></tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" id="empty-state">
+    <div class="icon">📋</div>
+    <h3>Ready to Extract</h3>
+    <p>Paste booking confirmation emails or upload a screenshot above.</p>
+  </div>
+
+</div>
+
+<script>
+// ── Constants ───────────────────────────────────────────────────────────────
+const FIELDS = [
+  "reference","airport","terminalIn","terminalOut","customerName","mobileNo",
+  "departureDate","departureTime","departureFlight","returnDate","returnTime",
+  "returnFlight","registration","make","model","colour","days","price","status","email","product"
+];
+const HEADERS = [
+  "REFERENCE","Airport","Terminal In","Terminal Out","Customer","Mobile No.",
+  "Departure Date","Departure Time","Departure Flight","Return Date","Return Time",
+  "Return Flight","Registration","Make","Model","Colour","Days","Price","Status","Email","PRODUCT"
+];
+
+// ── DOM refs ────────────────────────────────────────────────────────────────
+const inputText      = document.getElementById("input-text");
+const dropzone       = document.getElementById("dropzone");
+const fileInput      = document.getElementById("file-input");
+const dzEmpty        = document.getElementById("dropzone-empty");
+const dzFilled       = document.getElementById("dropzone-filled");
+const fileName       = document.getElementById("file-name");
+const fileSize       = document.getElementById("file-size");
+const btnRemove      = document.getElementById("btn-remove");
+const btnClear       = document.getElementById("btn-clear");
+const btnExtract     = document.getElementById("btn-extract");
+const errorBox       = document.getElementById("error-box");
+const resultsSection = document.getElementById("results-section");
+const recordCount    = document.getElementById("record-count");
+const tableHead      = document.getElementById("table-head");
+const tableBody      = document.getElementById("table-body");
+const btnCSV         = document.getElementById("btn-csv");
+const emptyState     = document.getElementById("empty-state");
+
+let selectedFile = null;
+let imageBase64  = null;
+let imageMime    = null;
+let records      = [];
+
+// ── Build table header ──────────────────────────────────────────────────────
+HEADERS.forEach(h => {
+  const th = document.createElement("th");
+  th.textContent = h;
+  tableHead.appendChild(th);
+});
+
+// ── File handling ───────────────────────────────────────────────────────────
+function setFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = (file.size / 1024).toFixed(1) + " KB";
+  dzEmpty.style.display = "none";
+  dzFilled.style.display = "block";
+  dropzone.classList.add("has-file");
+
+  // Convert to base64
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    imageBase64 = dataUrl.split(",")[1];
+    imageMime = file.type;
+  };
+  reader.readAsDataURL(file);
+  updateButtons();
+}
+
+function clearFile() {
+  selectedFile = null;
+  imageBase64 = null;
+  imageMime = null;
+  fileInput.value = "";
+  dzEmpty.style.display = "";
+  dzFilled.style.display = "none";
+  dropzone.classList.remove("has-file");
+  updateButtons();
+}
+
+// Dropzone events
+dropzone.addEventListener("click", (e) => {
+  if (e.target === btnRemove || e.target.closest(".btn-remove")) return;
+  fileInput.click();
+});
+fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+btnRemove.addEventListener("click", (e) => { e.stopPropagation(); clearFile(); });
+
+dropzone.addEventListener("dragover",  (e) => { e.preventDefault(); dropzone.classList.add("drag-over"); });
+dropzone.addEventListener("dragleave", (e) => { e.preventDefault(); dropzone.classList.remove("drag-over"); });
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("drag-over");
+  setFile(e.dataTransfer.files[0]);
+});
+
+// ── Button state ────────────────────────────────────────────────────────────
+function updateButtons() {
+  const hasInput = inputText.value.trim() || selectedFile;
+  btnExtract.disabled = !hasInput;
+}
+inputText.addEventListener("input", updateButtons);
+
+// ── Clear All ───────────────────────────────────────────────────────────────
+btnClear.addEventListener("click", () => {
+  inputText.value = "";
+  clearFile();
+  records = [];
+  resultsSection.style.display = "none";
+  emptyState.style.display = "";
+  errorBox.classList.remove("show");
+  updateButtons();
+});
+
+// ── Show error ──────────────────────────────────────────────────────────────
+function showError(msg) {
+  errorBox.textContent = "⚠️ " + msg;
+  errorBox.classList.add("show");
+}
+
+// ── Extract ─────────────────────────────────────────────────────────────────
+btnExtract.addEventListener("click", async () => {
+  errorBox.classList.remove("show");
+  btnExtract.disabled = true;
+  btnExtract.innerHTML = '<span class="spinner"></span> Analyzing...';
+
+  try {
+    const payload = {
+      input_text: inputText.value.trim(),
+      image_base64: imageBase64,
+      mime_type: imageMime
+    };
+
+    const res = await fetch("/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    console.log("Server response:", data);
+
+    if (!res.ok) {
+      showError(data.error || "Server error");
+      return;
+    }
+
+    records = data.records || [];
+    console.log("Records to render:", records.length, records);
+    renderTable();
+
+  } catch (err) {
+    showError(err.message || "Network error — is the server running?");
+  } finally {
+    btnExtract.innerHTML = "Extract & Format Table →";
+    updateButtons();
+  }
+});
+
+// ── Render table ────────────────────────────────────────────────────────────
+function renderTable() {
+  console.log("renderTable called, records:", records.length);
+  tableBody.innerHTML = "";
+
+  if (records.length === 0) {
+    resultsSection.style.display = "none";
+    emptyState.style.display = "block";
+    return;
+  }
+
+  emptyState.style.display = "none";
+  resultsSection.style.display = "block";
+  recordCount.textContent = records.length + " records";
+
+  records.forEach(r => {
+    const tr = document.createElement("tr");
+    FIELDS.forEach(f => {
+      const td = document.createElement("td");
+      let val = r[f] || "";
+
+      if (f === "price") {
+        val = val.toString().replace(/[£$€]/g, "");
+        td.className = "price-cell";
+        td.textContent = val;
+      } else if (f === "registration") {
+        const code = document.createElement("span");
+        code.className = "reg-plate";
+        code.textContent = val;
+        td.appendChild(code);
+      } else if (f === "product") {
+        const tag = document.createElement("span");
+        tag.className = "tag " + (
+          val === "M&G" ? "tag-mg" :
+          val === "P&R" ? "tag-pr" :
+          val === "EV"  ? "tag-ev" : "tag-def"
+        );
+        tag.textContent = val;
+        td.appendChild(tag);
+      } else {
+        td.textContent = val;
+      }
+
+      tr.appendChild(td);
+    });
+    tableBody.appendChild(tr);
+  });
+}
+
+// ── CSV Export ───────────────────────────────────────────────────────────────
+btnCSV.addEventListener("click", () => {
+  if (records.length === 0) return;
+
+  const rows = [HEADERS.join(",")];
+  records.forEach(r => {
+    const row = FIELDS.map(f => {
+      let v = r[f] || "";
+      if (f === "price") v = v.toString().replace(/[£$€]/g, "");
+      return '"' + v.toString().replace(/"/g, '""') + '"';
+    });
+    rows.push(row.join(","));
+  });
+
+  const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "parking_records_" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+});
+</script>
+</body>
+</html>
