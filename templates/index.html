@@ -189,6 +189,27 @@
   .empty-state p { margin-top: 6px; max-width: 320px; margin-left: auto; margin-right: auto; }
 
   #results-section { display: none; }
+
+  /* -- Tabs & Activity -- */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #e8e6e1; }
+  .tab-btn {
+    padding: 10px 18px; border: none; background: transparent; font-family: inherit;
+    font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: #1a1a1a; }
+  .tab-btn.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: #fff; border: 1px solid #e8e6e1; border-radius: 12px; padding: 16px 18px; }
+  .stat .stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+  .stat .stat-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .stat .stat-value.cost { color: #059669; }
+  .tag-ok  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .tag-err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  .pricing-note { font-size: 12px; color: #9ca3af; margin-top: 10px; }
+  .usage-line { font-size: 12px; color: #6b7280; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
@@ -204,6 +225,31 @@
 </nav>
 
 <div class="container">
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-extract">Extract</button>
+    <button class="tab-btn" data-tab="tab-activity">Activity &amp; Cost</button>
+  </div>
+
+  <div class="tab-panel" id="tab-activity">
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value" id="st-sessions">0</div></div>
+      <div class="stat"><div class="stat-label">Records extracted</div><div class="stat-value" id="st-records">0</div></div>
+      <div class="stat"><div class="stat-label">Tokens (in / out)</div><div class="stat-value" id="st-tokens" style="font-size:18px">0 / 0</div></div>
+      <div class="stat"><div class="stat-label">Total cost</div><div class="stat-value cost" id="st-cost">$0.0000</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Input</th><th>Records</th><th>Tokens in</th><th>Tokens out</th><th>Cost (USD)</th><th>Status</th>
+        </tr></thead>
+        <tbody id="activity-body"></tbody>
+      </table>
+    </div>
+    <div class="pricing-note" id="pricing-note"></div>
+  </div>
+
+  <div class="tab-panel active" id="tab-extract">
 
   <!-- Input Card -->
   <div class="card">
@@ -269,6 +315,9 @@
     <h3>Ready to Extract</h3>
     <p>Paste booking confirmation emails or upload a screenshot above.</p>
   </div>
+
+  <div class="usage-line" id="usage-line"></div>
+  </div><!-- /tab-extract -->
 
 </div>
 
@@ -416,6 +465,12 @@ btnExtract.addEventListener("click", async () => {
     }
 
     records = data.records || [];
+    if (data.usage) {
+      const ul = document.getElementById("usage-line");
+      ul.textContent = "This run: " + data.usage.prompt_tokens + " in / " + data.usage.completion_tokens +
+        " out tokens - $" + data.usage.cost_usd.toFixed(4);
+      ul.style.display = "block";
+    }
     console.log("Records to render:", records.length, records);
     renderTable();
 
@@ -496,6 +551,55 @@ btnCSV.addEventListener("click", () => {
   a.download = "parking_records_" + new Date().toISOString().slice(0, 10) + ".csv";
   a.click();
 });
+
+// -- Tabs & Activity --
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === btn.dataset.tab));
+    if (btn.dataset.tab === "tab-activity") loadActivity();
+  });
+});
+
+async function loadActivity() {
+  const body = document.getElementById("activity-body");
+  try {
+    const d = await (await fetch("/activity")).json();
+    const t = d.totals;
+    document.getElementById("st-sessions").textContent = t.sessions;
+    document.getElementById("st-records").textContent = t.records;
+    document.getElementById("st-tokens").textContent =
+      t.prompt_tokens.toLocaleString() + " / " + t.completion_tokens.toLocaleString();
+    document.getElementById("st-cost").textContent = "$" + t.cost_usd.toFixed(4);
+    document.getElementById("pricing-note").textContent =
+      "Estimated from " + d.model + " list price: $" + d.pricing.input_per_m.toFixed(2) + " / 1M input tokens, $" +
+      d.pricing.output_per_m.toFixed(2) + " / 1M output tokens. Check your OpenAI dashboard for exact billing.";
+
+    body.innerHTML = "";
+    if (!d.entries.length) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:30px">No activity yet</td></tr>';
+      return;
+    }
+    d.entries.forEach(e => {
+      const tr = document.createElement("tr");
+      const input = [e.has_text ? "Text" : "", e.has_image ? "Image" : ""].filter(Boolean).join(" + ") || "-";
+      const cells = [
+        new Date(e.time).toLocaleString(), input, e.records,
+        e.prompt_tokens.toLocaleString(), e.completion_tokens.toLocaleString(), "$" + e.cost_usd.toFixed(4)
+      ];
+      cells.forEach(c => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
+      const td = document.createElement("td");
+      const tag = document.createElement("span");
+      tag.className = "tag " + (e.status === "ok" ? "tag-ok" : "tag-err");
+      tag.textContent = e.status === "ok" ? "OK" : "Error";
+      if (e.error) tag.title = e.error;
+      td.appendChild(tag); tr.appendChild(td);
+      body.appendChild(tr);
+    });
+  } catch (err) {
+    body.innerHTML = '<tr><td colspan="7" style="color:#dc2626;padding:20px">Failed to load activity: ' + err.message + '</td></tr>';
+  }
+}
 </script>
 </body>
 </html>

@@ -10,6 +10,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import json
 import os
+import threading
+from datetime import datetime, timezone
 
 load_dotenv()  # reads .env file
 
@@ -20,6 +22,40 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     print("\n  ⚠️  OPENAI_API_KEY not found in .env file!")
     print("  Create a .env file with: OPENAI_API_KEY=sk-your-key-here\n")
+
+# -- Activity / cost tracking ------------------------------------------------
+MODEL = "gpt-4o"
+# USD per 1M tokens (gpt-4o list price) - update if OpenAI pricing changes
+PRICE_INPUT_PER_M = 2.50
+PRICE_OUTPUT_PER_M = 10.00
+ACTIVITY_FILE = os.getenv("ACTIVITY_FILE", "activity_log.json")
+_log_lock = threading.Lock()
+
+
+def _load_activity():
+    try:
+        with open(ACTIVITY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+ACTIVITY = _load_activity()
+
+
+def log_activity(entry):
+    with _log_lock:
+        ACTIVITY.append(entry)
+        try:
+            with open(ACTIVITY_FILE, "w", encoding="utf-8") as f:
+                json.dump(ACTIVITY, f)
+        except Exception as e:
+            print(f"  Could not save activity log: {e}")
+
+
+def calc_cost(prompt_tokens, completion_tokens):
+    return (prompt_tokens * PRICE_INPUT_PER_M + completion_tokens * PRICE_OUTPUT_PER_M) / 1_000_000
+
 
 FIELDS = [
     "reference","airport","terminalIn","terminalOut","customerName","mobileNo",
@@ -110,13 +146,65 @@ def extract():
         else:
             records = []
 
-        print(f"  ✅ Extracted {len(records)} records\n")
-        return jsonify({"records": records})
+        usage = response.usage
+        pt = usage.prompt_tokens if usage else 0
+        ct = usage.completion_tokens if usage else 0
+        cost = calc_cost(pt, ct)
+        log_activity({
+            "time": datetime.now(timezone.utc).isoformat(),
+            "model": MODEL,
+            "has_text": bool(input_text),
+            "has_image": bool(image_b64),
+            "records": len(records),
+            "prompt_tokens": pt,
+            "completion_tokens": ct,
+            "cost_usd": cost,
+            "status": "ok",
+        })
+
+        print(f"  ✅ Extracted {len(records)} records (${cost:.4f})\n")
+        return jsonify({"records": records, "usage": {"prompt_tokens": pt, "completion_tokens": ct, "cost_usd": cost}})
 
     except json.JSONDecodeError:
+        _log_failure(input_text, image_b64, "Failed to parse AI response as JSON")
         return jsonify({"error": "Failed to parse AI response as JSON"}), 500
     except Exception as e:
+        _log_failure(input_text, image_b64, str(e))
         return jsonify({"error": str(e)}), 500
+
+
+def _log_failure(input_text, image_b64, msg):
+    log_activity({
+        "time": datetime.now(timezone.utc).isoformat(),
+        "model": MODEL,
+        "has_text": bool(input_text),
+        "has_image": bool(image_b64),
+        "records": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cost_usd": 0.0,
+        "status": "error",
+        "error": msg[:200],
+    })
+
+
+@app.route("/activity")
+def activity():
+    with _log_lock:
+        entries = list(ACTIVITY)
+    ok = [e for e in entries if e.get("status") == "ok"]
+    return jsonify({
+        "model": MODEL,
+        "pricing": {"input_per_m": PRICE_INPUT_PER_M, "output_per_m": PRICE_OUTPUT_PER_M},
+        "totals": {
+            "sessions": len(entries),
+            "records": sum(e.get("records", 0) for e in ok),
+            "prompt_tokens": sum(e.get("prompt_tokens", 0) for e in ok),
+            "completion_tokens": sum(e.get("completion_tokens", 0) for e in ok),
+            "cost_usd": sum(e.get("cost_usd", 0) for e in ok),
+        },
+        "entries": entries[::-1],
+    })
 
 
 if __name__ == "__main__":
